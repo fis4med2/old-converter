@@ -46,3 +46,4 @@ preview_*.mp4
 .env.*
 *.key
 *.pem
+src-tauri/gen/

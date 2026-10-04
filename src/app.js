@@ -105,7 +105,7 @@ async function refreshEstimate() {
   try {
     const est = await invoke("cmd_estimate", {
       duration: current.duration, width: s.width || current.width, height: s.height || current.height,
-      crf: s.crf, video_bitrate: s.video_bitrate, audio_bitrate: s.audio_bitrate,
+      crf: s.crf, videoBitrate: s.video_bitrate, audioBitrate: s.audio_bitrate,
     });
     $("estNew").textContent = est;
   } catch { $("estNew").textContent = "~unknown (approx.)"; }
@@ -176,7 +176,11 @@ async function doConvertOne(input, info, settings, presetLabel) {
     pushHistory({ in: info.file_name, out: out.split(/[/\\]/).pop(), preset: presetLabel, size: outSize });
     return true;
   } catch (e) {
-    if (e !== "cancelled") err(typeof e === "string" ? e : "Conversion failed.");
+    if (e === "cancelled") {
+      $("progWrap").classList.add("hidden");
+    } else {
+      err(typeof e === "string" ? e : "Conversion failed.");
+    }
     return false;
   } finally {
     runningId = null;
@@ -198,6 +202,10 @@ async function onConvert() {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+  if (!window.__TAURI__ || !window.__TAURI__.core) {
+    $("ffStatus").textContent = "FATAL: Tauri API missing — app.withGlobalTauri must be true in tauri.conf.json.";
+    return;
+  }
   renderQueue(); renderHistory();
   document.querySelectorAll('input[name="preset"]').forEach((r) => r.addEventListener("change", () => { applyPresetToCustom(presetId()); refreshEstimate(); }));
   ["c_width","c_height","c_fps","c_vcodec","c_crf","c_vbitrate","c_acodec","c_abitrate","c_format","c_preset"].forEach((id) => $(id).addEventListener("input", refreshEstimate));
@@ -242,7 +250,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     try {
       const f = await invoke("cmd_pick_file");
       if (f) loadFile(f);
-    } catch (e) { err("Cannot open dialog."); }
+    } catch (e) { err(typeof e === "string" ? e : "Cannot open dialog: " + JSON.stringify(e)); }
   };
   $("btnOpen").onclick = pick;
   dz.onclick = pick;

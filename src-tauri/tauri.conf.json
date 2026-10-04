@@ -2,14 +2,12 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Old Converter",
   "version": "1.0.0",
-  "identifier": "com.oldconverter.app",
+  "identifier": "com.oldconverter.desktop",
   "build": {
-    "frontendDist": "../src",
-    "devUrl": null,
-    "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "frontendDist": "../src"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Old Converter",
@@ -20,7 +18,11 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      }
     }
   },
   "bundle": {
@@ -40,6 +42,6 @@
         "bundleMediaFramework": true
       }
     },
-    "resources": ["../ffmpeg/**/*", "../presets/**/*", "../assets/**/*"]
+    "resources": ["../ffmpeg/**/*", "../presets/**/*"]
   }
 }

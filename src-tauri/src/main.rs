@@ -1,52 +1,63 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-type JobMap = Arc<Mutex<HashMap<String, Arc<Mutex<tokio::process::Child>>>>>;
+struct JobEntry {
+    kill: Arc<Notify>,
+    cancelled: Arc<AtomicBool>,
+}
 
 struct AppState {
-    jobs: JobMap,
+    jobs: Arc<Mutex<HashMap<String, JobEntry>>>,
 }
 
 // ---------- ffmpeg resolution ----------
 
 fn candidate_bins(app: &AppHandle, base: &str) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    let is_win = cfg!(windows);
-    let exe = if is_win { format!("{base}.exe") } else { base.to_string() };
+    let plat = if cfg!(windows) { "windows" } else { "linux" };
+    let exe = if cfg!(windows) { format!("{base}.exe") } else { base.to_string() };
+
     if let Ok(res) = app.path().resource_dir() {
-        #[cfg(windows)]
-        out.push(res.join("ffmpeg").join("windows").join(&exe));
-        #[cfg(not(windows))]
-        out.push(res.join("ffmpeg").join("linux").join(&exe));
-        out.push(res.join("bin").join(&exe));
-        out.push(res.join(&exe));
-    }
-    if let Ok(cwd) = std::env::current_dir() {
-        for p in [
-            cwd.join("ffmpeg").join(if cfg!(windows) { "windows" } else { "linux" }).join(&exe),
-            cwd.join("../ffmpeg").join(if cfg!(windows) { "windows" } else { "linux" }).join(&exe),
-            cwd.join("../../ffmpeg").join(if cfg!(windows) { "windows" } else { "linux" }).join(&exe),
-        ] {
-            out.push(p);
+        let mut roots = vec![res.clone()];
+        let mut cur = res.as_path();
+        for _ in 0..3 {
+            match cur.parent() {
+                Some(p) => {
+                    roots.push(p.to_path_buf());
+                    cur = p;
+                }
+                None => break,
+            }
+        }
+        for r in roots {
+            out.push(r.join("ffmpeg").join(plat).join(&exe));
+            out.push(r.join("bin").join(&exe));
+            out.push(r.join(&exe));
         }
     }
-    if let Ok(exe_dir) = std::env::current_exe() {
-        if let Some(d) = exe_dir.parent() {
+    if let Ok(cwd) = std::env::current_dir() {
+        out.push(cwd.join("ffmpeg").join(plat).join(&exe));
+        out.push(cwd.join("..").join("ffmpeg").join(plat).join(&exe));
+        out.push(cwd.join("..").join("..").join("ffmpeg").join(plat).join(&exe));
+    }
+    if let Ok(self_exe) = std::env::current_exe() {
+        if let Some(d) = self_exe.parent() {
             out.push(d.join(&exe));
-            out.push(d.join("ffmpeg").join(&exe));
+            out.push(d.join("ffmpeg").join(plat).join(&exe));
             if let Some(p) = d.parent() {
-                out.push(p.join("ffmpeg").join(if cfg!(windows) { "windows" } else { "linux" }).join(&exe));
+                out.push(p.join("ffmpeg").join(plat).join(&exe));
             }
         }
     }
-    out.push(PathBuf::from(exe));
+    out.push(PathBuf::from(&exe));
     out
 }
 
@@ -60,15 +71,13 @@ fn resolve_bin(app: &AppHandle, base: &str) -> Result<PathBuf, String> {
             }
             return Ok(c);
         }
-        if c.components().count() == 1 {
-            // PATH fallback: try running `<bin> -version`
-            let probe = std::process::Command::new(&c).arg("-version").output();
-            if probe.map(|o| o.status.success()).unwrap_or(false) {
-                return Ok(c);
-            }
-        }
     }
-    Err(format!("{} not found. Install FFmpeg or bundle it under ffmpeg/windows|linux.", base))
+    // last resort: system PATH
+    let probe = std::process::Command::new(base).arg("-version").output();
+    if probe.map(|o| o.status.success()).unwrap_or(false) {
+        return Ok(PathBuf::from(base));
+    }
+    Err(format!("{base} not found. Expected it under ffmpeg/{plat}/ next to the app.", plat = if cfg!(windows) { "windows" } else { "linux" }))
 }
 
 #[derive(Serialize)]
@@ -86,8 +95,45 @@ fn cmd_get_version() -> String {
 fn cmd_ffmpeg_paths(app: AppHandle) -> Result<BinPaths, String> {
     Ok(BinPaths {
         ffmpeg: resolve_bin(&app, "ffmpeg")?.to_string_lossy().to_string(),
-        ffprobe: resolve_bin(&app, "ffprobe").unwrap_or(PathBuf::from("ffprobe")).to_string_lossy().to_string(),
+        ffprobe: resolve_bin(&app, "ffprobe").unwrap_or_else(|_| PathBuf::from("ffprobe")).to_string_lossy().to_string(),
     })
+}
+
+#[tauri::command]
+async fn cmd_pick_file(app: AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .add_filter("Video", &["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv", "m4v", "mpg", "mpeg", "ts"])
+        .pick_file(move |f| {
+            let _ = tx.send(f);
+        });
+    let picked = rx.await.unwrap_or(None);
+    Ok(picked.map(|f| f.to_string()))
+}
+
+#[tauri::command]
+fn cmd_reveal(path: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        std::process::Command::new("explorer")
+            .arg(format!("/select,{}", path))
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(windows))]
+    {
+        let dir = Path::new(&path)
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or(path);
+        std::process::Command::new("xdg-open")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 // ---------- probe ----------
@@ -117,7 +163,7 @@ fn human_size(b: u64) -> String {
     let mut v = b as f64;
     let mut i = 0;
     while v >= 1024.0 && i < 4 {
-        v /= 1020.0 + 4.0; // == 1024, avoids magic-number lint noise
+        v /= 1024.0;
         i += 1;
     }
     if i == 0 {
@@ -158,7 +204,10 @@ async fn cmd_probe(app: AppHandle, path: String) -> Result<ProbeInfo, String> {
         .map_err(|e| format!("Cannot run ffprobe: {e}"))?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
-        return Err(format!("ffprobe failed (corrupted file?): {}", err.chars().take(300).collect::<String>()));
+        return Err(format!(
+            "ffprobe failed (corrupted or unsupported file?): {}",
+            err.chars().take(300).collect::<String>()
+        ));
     }
     let v: serde_json::Value =
         serde_json::from_slice(&out.stdout).map_err(|_| "ffprobe returned invalid data.".to_string())?;
@@ -172,16 +221,20 @@ async fn cmd_probe(app: AppHandle, path: String) -> Result<ProbeInfo, String> {
         .and_then(|s| s.get("avg_frame_rate").or(s.get("r_frame_rate")).and_then(|x| x.as_str()))
         .map(parse_fps)
         .unwrap_or(0.0);
-    let codec = vs.and_then(|s| s.get("codec_name").and_then(|x| x.as_str())).unwrap_or("unknown").to_string();
+    let codec = vs
+        .and_then(|s| s.get("codec_name").and_then(|x| x.as_str()))
+        .unwrap_or("unknown")
+        .to_string();
     let duration: f64 = fmt
         .get("duration")
         .and_then(|d| d.as_str().and_then(|x| x.parse().ok()))
         .or(vs.and_then(|s| s.get("duration").and_then(|x| x.as_str()).and_then(|x| x.parse().ok())))
         .unwrap_or(0.0);
-    let vbr: Option<u64> = fmt
-        .get("bit_rate")
-        .and_then(|b| b.as_str()?.parse().ok());
-    let acodec = au.and_then(|s| s.get("codec_name").and_then(|x| x.as_str())).unwrap_or("none").to_string();
+    let vbr: Option<u64> = fmt.get("bit_rate").and_then(|b| b.as_str()?.parse().ok());
+    let acodec = au
+        .and_then(|s| s.get("codec_name").and_then(|x| x.as_str()))
+        .unwrap_or("none")
+        .to_string();
     let abr = au.and_then(|s| s.get("bit_rate").and_then(|x| x.as_str()).and_then(|x| x.parse::<u64>().ok()));
     let file_name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
     Ok(ProbeInfo {
@@ -197,8 +250,17 @@ async fn cmd_probe(app: AppHandle, path: String) -> Result<ProbeInfo, String> {
         duration,
         duration_str: fmt_time(duration),
         video_bitrate: vbr,
-        video_bitrate_str: vbr.map(|b| format!("{} kb/s", b / 1000)).unwrap_or_else(|| "unknown".into()),
-        audio: if acodec == "none" { "no audio".into() } else { format!("{acodec}, {}", abr.map(|b| format!("{}k", b / 1000)).unwrap_or_else(|| "unknown bitrate".into())) },
+        video_bitrate_str: vbr
+            .map(|b| format!("{} kb/s", b / 1000))
+            .unwrap_or_else(|| "unknown".into()),
+        audio: if acodec == "none" {
+            "no audio".into()
+        } else {
+            format!(
+                "{acodec}, {}",
+                abr.map(|b| format!("{}k", b / 1000)).unwrap_or_else(|| "unknown bitrate".into())
+            )
+        },
         audio_codec: acodec,
         audio_bitrate_str: abr.map(|b| format!("{}k", b / 1000)).unwrap_or_else(|| "128k".into()),
     })
@@ -230,7 +292,17 @@ struct OldStyle {
 
 impl Default for OldStyle {
     fn default() -> Self {
-        Self { blur: false, fade: false, lowbitrate: false, sharpen: false, noise: false, ratio43: false, reduce_fps: false, audio_comp: false, vhs: false }
+        Self {
+            blur: false,
+            fade: false,
+            lowbitrate: false,
+            sharpen: false,
+            noise: false,
+            ratio43: false,
+            reduce_fps: false,
+            audio_comp: false,
+            vhs: false,
+        }
     }
 }
 
@@ -247,7 +319,7 @@ struct ConvertSettings {
     #[serde(default)]
     crf: Option<i32>,
     #[serde(default)]
-    video_bitrate: Option<String>, // e.g. "1200k", empty = none
+    video_bitrate: Option<String>,
     #[serde(default = "d_acodec")]
     audio_codec: String, // aac|mp3|opus|none
     #[serde(default = "d_abitrate")]
@@ -255,7 +327,7 @@ struct ConvertSettings {
     #[serde(default = "d_format")]
     format: String, // mp4|mkv|avi|mov|webm
     #[serde(default = "d_preset")]
-    x264_preset: String, // ultrafast..veryslow
+    x264_preset: String,
     #[serde(default)]
     old_style: OldStyle,
 }
@@ -275,7 +347,8 @@ fn encoder_args(vcodec: &str) -> Vec<String> {
     }
 }
 
-fn build_args(input: &str, output: &str, s: &ConvertSettings, preview_secs: Option<u64>) -> Vec<String> {
+/// preview: Some((start_secs, clip_secs)) renders only a clip instead of the whole file.
+fn build_args(input: &str, output: &str, s: &ConvertSettings, preview: Option<(u64, u64)>) -> Vec<String> {
     let mut a: Vec<String> = vec!["-y".into(), "-nostats".into()];
     let mut vf: Vec<String> = Vec::new();
 
@@ -308,14 +381,13 @@ fn build_args(input: &str, output: &str, s: &ConvertSettings, preview_secs: Opti
         vf.push("unsharp=5:5:0.8:5:5:0.0".into());
     }
 
-    // preview trim: -ss 5 -t N
-    if preview_secs.is_some() {
+    if let Some((start, _)) = preview {
         a.push("-ss".into());
-        a.push("5".into());
+        a.push(start.to_string());
     }
     a.push("-i".into());
     a.push(input.into());
-    if let Some(secs) = preview_secs {
+    if let Some((_, secs)) = preview {
         a.push("-t".into());
         a.push(secs.to_string());
     }
@@ -350,7 +422,6 @@ fn build_args(input: &str, output: &str, s: &ConvertSettings, preview_secs: Opti
         a.push(c.clamp(0, 51).to_string());
     }
 
-    // audio
     let mut af: Vec<String> = Vec::new();
     if s.old_style.audio_comp {
         af.push("acompressor=threshold=-18dB:ratio=3:attack=20:release=250".into());
@@ -391,9 +462,11 @@ fn build_args(input: &str, output: &str, s: &ConvertSettings, preview_secs: Opti
         a.push("-movflags".into());
         a.push("+faststart".into());
     }
-    // progress last so parse works
-    a.push("-progress".into());
-    a.push("pipe:1".into());
+    if preview.is_none() {
+        // progress last so it is easy to parse
+        a.push("-progress".into());
+        a.push("pipe:1".into());
+    }
     a.push(output.into());
     a
 }
@@ -421,16 +494,11 @@ struct ProgressPayload {
 }
 
 #[tauri::command]
-fn cmd_build_args(req: ConvertRequest) -> Vec<String> {
-    build_args(&req.input, &req.output, &req.settings, None)
-}
-
-#[tauri::command]
 async fn cmd_cancel(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let map = state.jobs.lock().await;
-    if let Some(child) = map.get(&id) {
-        let mut c = child.lock().await;
-        c.start_kill().map_err(|e| e.to_string())?;
+    if let Some(job) = map.get(&id) {
+        job.cancelled.store(true, Ordering::SeqCst);
+        job.kill.notify_one();
         Ok(())
     } else {
         Err("Job not running.".into())
@@ -452,73 +520,123 @@ async fn cmd_convert(app: AppHandle, state: State<'_, AppState>, req: ConvertReq
 
     let mut child = tokio::process::Command::new(&ffmpeg)
         .args(&args)
+        .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
         .map_err(|e| format!("Cannot start ffmpeg: {e}"))?;
 
     let stdout = child.stdout.take().expect("piped stdout");
-    let id = req.id.clone();
-    let total = req.duration.max(0.1);
-    let handle: Arc<Mutex<tokio::process::Child>> = Arc::new(Mutex::new(child));
-    state.jobs.lock().await.insert(id.clone(), handle.clone());
+    let stderr = child.stderr.take().expect("piped stderr");
 
-    let app2 = app.clone();
-    let id2 = id.clone();
-    tokio::spawn(async move {
-        let mut reader = BufReader::new(stdout).lines();
-        let mut cur_ms: i64 = 0;
-        let mut speed = String::from("--");
-        while let Ok(Some(line)) = reader.next_line().await {
-            let line = line.trim().to_string();
-            if let Some(v) = line.strip_prefix("out_time_ms=") {
-                cur_ms = v.parse().unwrap_or(cur_ms);
-            } else if let Some(v) = line.strip_prefix("speed=") {
-                let v = v.trim().to_string();
-                if !v.is_empty() && v != "n/a" {
-                    speed = v;
-                }
-            } else if line == "progress=end" {
-                break;
-            }
-            if line.starts_with("out_time_ms=") || line.starts_with("speed=") {
-                let cur = cur_ms.max(0) as f64 / 1_000_000.0;
-                let pct = ((cur / total) * 100.0).clamp(0.0, 100.0);
-                let factor: f64 = speed.trim_end_matches('x').parse().unwrap_or(0.0);
-                let eta = if factor > 0.0 { (total - cur).max(0.0) / factor } else { 0.0 };
-                let _ = app2.emit(
-                    "convert-progress",
-                    ProgressPayload {
-                        id: id2.clone(),
-                        percent: (pct * 10.0).round() / 10.0,
-                        current_secs: cur,
-                        total_secs: total,
-                        current_str: fmt_time(cur),
-                        total_str: fmt_time(total),
-                        speed: speed.clone(),
-                        eta_str: fmt_time(eta),
-                        done: false,
-                    },
-                );
+    let kill = Arc::new(Notify::new());
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let kill2 = kill.clone();
+    let waiter = tokio::spawn(async move {
+        tokio::select! {
+            r = child.wait() => r,
+            _ = kill2.notified() => {
+                let _ = child.start_kill();
+                child.wait().await
             }
         }
     });
 
-    let status = {
-        let mut c = handle.lock().await;
-        c.wait().await.map_err(|e| format!("ffmpeg error: {e}"))?
-    };
+    let id = req.id.clone();
+    let total = req.duration.max(0.1);
+    state.jobs.lock().await.insert(
+        id.clone(),
+        JobEntry { kill, cancelled: cancelled.clone() },
+    );
+
+    // progress reader
+    {
+        let app2 = app.clone();
+        let id2 = id.clone();
+        tokio::spawn(async move {
+            let mut reader = BufReader::new(stdout).lines();
+            let mut cur_ms: i64 = 0;
+            let mut speed = String::from("--");
+            while let Ok(Some(line)) = reader.next_line().await {
+                let line = line.trim().to_string();
+                let mut changed = false;
+                if let Some(v) = line.strip_prefix("out_time_ms=") {
+                    cur_ms = v.parse().unwrap_or(cur_ms);
+                    changed = true;
+                } else if let Some(v) = line.strip_prefix("speed=") {
+                    let v = v.trim().to_string();
+                    if !v.is_empty() && v != "n/a" {
+                        speed = v;
+                        changed = true;
+                    }
+                } else if line == "progress=end" {
+                    break;
+                }
+                if changed {
+                    let cur = cur_ms.max(0) as f64 / 1_000_000.0;
+                    let pct = ((cur / total) * 100.0).clamp(0.0, 100.0);
+                    let factor: f64 = speed.trim_end_matches('x').parse().unwrap_or(0.0);
+                    let eta = if factor > 0.0 { (total - cur).max(0.0) / factor } else { 0.0 };
+                    let _ = app2.emit(
+                        "convert-progress",
+                        ProgressPayload {
+                            id: id2.clone(),
+                            percent: (pct * 10.0).round() / 10.0,
+                            current_secs: cur,
+                            total_secs: total,
+                            current_str: fmt_time(cur),
+                            total_str: fmt_time(total),
+                            speed: speed.clone(),
+                            eta_str: fmt_time(eta),
+                            done: false,
+                        },
+                    );
+                }
+            }
+        });
+    }
+
+    // stderr tail reader (diagnostics + avoids pipe deadlock)
+    let tail = Arc::new(Mutex::new(String::new()));
+    {
+        let t = tail.clone();
+        tokio::spawn(async move {
+            let mut reader = BufReader::new(stderr).lines();
+            while let Ok(Some(line)) = reader.next_line().await {
+                let mut s = t.lock().await;
+                s.push_str(&line);
+                s.push('\n');
+                if s.len() > 4000 {
+                    let cut = s.len() - 4000;
+                    let at = s[cut..].find('\n').map(|i| cut + i + 1).unwrap_or(cut);
+                    s.drain(..at);
+                }
+            }
+        });
+    }
+
+    let status = waiter
+        .await
+        .map_err(|e| format!("ffmpeg task failed: {e}"))?
+        .map_err(|e| format!("ffmpeg wait failed: {e}"))?;
     state.jobs.lock().await.remove(&id);
 
     if !status.success() {
-        // cancelled (SIGKILL / 255) vs real error: check output exists
-        let cancelled = status.code().is_none();
-        if cancelled || !Path::new(&req.output).exists() {
-            let _ = std::fs::remove_file(&req.output);
+        let was_cancelled = cancelled.load(Ordering::SeqCst);
+        let _ = std::fs::remove_file(&req.output);
+        if was_cancelled || status.code().is_none() {
             return Err("cancelled".into());
         }
-        return Err(format!("ffmpeg exited with code {:?}", status.code()));
+        let t = tail.lock().await.clone();
+        let last: Vec<&str> = t.lines().rev().take(5).collect();
+        let msg: String = last.iter().rev().cloned().collect::<Vec<&str>>().join(" | ");
+        return Err(if msg.is_empty() {
+            format!("ffmpeg exited with code {:?}", status.code())
+        } else {
+            format!("ffmpeg failed: {msg}")
+        });
     }
+
     let _ = app.emit(
         "convert-progress",
         ProgressPayload {
@@ -551,22 +669,34 @@ async fn cmd_preview(app: AppHandle, req: PreviewRequest) -> Result<String, Stri
     let ffmpeg = resolve_bin(&app, "ffmpeg")?;
     let tmp = std::env::temp_dir().join(format!("oc_preview_{}.mp4", uuid::Uuid::new_v4()));
     let out = tmp.to_string_lossy().to_string();
-    let args = build_args(&req.input, &out, &req.settings, Some(10));
-    // strip -progress pipe for preview run
-    let filtered: Vec<String> = args.into_iter().filter(|x| x != "pipe:1" && x != "-progress").collect();
-    let status = tokio::process::Command::new(&ffmpeg)
-        .args(&filtered)
+    let start: u64 = if req.duration > 16.0 { 5 } else { 0 };
+    let clip: u64 = if req.duration > 8.0 { 10 } else { req.duration.max(1.0) as u64 };
+    let args = build_args(&req.input, &out, &req.settings, Some((start, clip)));
+    let res = tokio::process::Command::new(&ffmpeg)
+        .args(&args)
         .output()
         .await
         .map_err(|e| format!("Cannot run ffmpeg: {e}"))?;
-    if !status.status.success() {
-        return Err("Preview failed. Try a shorter file or different preset.".into());
+    if !res.status.success() {
+        let e = String::from_utf8_lossy(&res.stderr);
+        let last: Vec<&str> = e.lines().rev().take(3).collect();
+        return Err(format!(
+            "Preview failed: {}",
+            last.iter().rev().cloned().collect::<Vec<&str>>().join(" | ")
+        ));
     }
     Ok(out)
 }
 
 #[tauri::command]
-fn cmd_estimate(duration: f64, width: u32, height: u32, crf: Option<i32>, video_bitrate: Option<String>, audio_bitrate: String) -> String {
+fn cmd_estimate(
+    duration: f64,
+    width: u32,
+    height: u32,
+    crf: Option<i32>,
+    video_bitrate: Option<String>,
+    audio_bitrate: String,
+) -> String {
     if let Some(vb) = video_bitrate {
         let v = parse_bitrate(&vb);
         let a = parse_bitrate(&audio_bitrate);
@@ -575,11 +705,10 @@ fn cmd_estimate(duration: f64, width: u32, height: u32, crf: Option<i32>, video_
             return format!("~{}", human_size(bytes as u64));
         }
     }
-    // CRF approximation: base bitrate scales with pixels
     let px = (width as f64 * height as f64).max(307200.0);
-    let scale = px / 921600.0; // 720p ref
+    let scale = px / 921600.0; // 720p reference
     let c = crf.unwrap_or(26) as f64;
-    // rough: crf23@720p ~= 5 Mbps
+    // rough: ~5 Mbps at CRF23/720p, halves every ~6 CRF steps
     let mbps = 5.0 * scale * (2.0_f64.powf((23.0 - c) / 6.0));
     let total_bps = mbps * 1_000_000.0 + parse_bitrate(&audio_bitrate);
     format!("~{} (approx.)", human_size((total_bps * duration.max(1.0) / 8.0) as u64))
@@ -596,28 +725,6 @@ fn parse_bitrate(s: &str) -> f64 {
     }
 }
 
-#[tauri::command]
-async fn cmd_pick_file(app: AppHandle) -> Result<Option<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
-    let fp = app.dialog().file().add_filter("Video", &["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv", "m4v"]).blocking_pick_file();
-    Ok(fp.map(|f| f.to_string()))
-}
-
-#[tauri::command]
-fn cmd_reveal(path: String) -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        std::process::Command::new("explorer").arg(format!("/select,{}", path)).spawn().map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-    #[cfg(not(windows))]
-    {
-        let dir = Path::new(&path).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or(path);
-        std::process::Command::new("xdg-open").arg(dir).spawn().map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-}
-
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -628,7 +735,6 @@ pub fn run() {
             cmd_get_version,
             cmd_ffmpeg_paths,
             cmd_probe,
-            cmd_build_args,
             cmd_convert,
             cmd_cancel,
             cmd_preview,
