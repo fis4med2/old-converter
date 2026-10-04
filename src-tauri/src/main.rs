@@ -39,6 +39,8 @@ fn candidate_bins(app: &AppHandle, base: &str) -> Vec<PathBuf> {
         }
         for r in roots {
             out.push(r.join("ffmpeg").join(plat).join(&exe));
+            // linuxdeploy encodes ".." from resources escaping the dir as "_up_"
+            out.push(r.join("_up_").join("ffmpeg").join(plat).join(&exe));
             out.push(r.join("bin").join(&exe));
             out.push(r.join(&exe));
         }

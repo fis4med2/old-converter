@@ -42,6 +42,10 @@
         "bundleMediaFramework": true
       }
     },
-    "resources": ["../ffmpeg/**/*", "../presets/**/*"]
+    "resources": {
+      "../ffmpeg/linux/*": "ffmpeg/linux/",
+      "../ffmpeg/windows/*": "ffmpeg/windows/",
+      "../presets/*": "presets/"
+    }
   }
 }

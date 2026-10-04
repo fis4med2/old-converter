@@ -220,7 +220,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     const p = await invoke("cmd_ffmpeg_paths");
     $("ffStatus").textContent = `FFmpeg OK: ${p.ffmpeg}`;
   } catch (e) {
-    $("ffStatus").textContent = "FFmpeg NOT FOUND — bundle ffmpeg/windows|linux or install system ffmpeg.";
+    $("ffStatus").textContent = "FFmpeg NOT FOUND — " + (typeof e === "string" ? e : JSON.stringify(e));
   }
 
   try {
