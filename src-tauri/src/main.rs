@@ -580,7 +580,7 @@ fn cmd_estimate(duration: f64, width: u32, height: u32, crf: Option<i32>, video_
     let scale = px / 921600.0; // 720p ref
     let c = crf.unwrap_or(26) as f64;
     // rough: crf23@720p ~= 5 Mbps
-    let mbps = 5.0 * scale * (2.0_f64.pow((23.0 - c) / 6.0));
+    let mbps = 5.0 * scale * (2.0_f64.powf((23.0 - c) / 6.0));
     let total_bps = mbps * 1_000_000.0 + parse_bitrate(&audio_bitrate);
     format!("~{} (approx.)", human_size((total_bps * duration.max(1.0) / 8.0) as u64))
 }
