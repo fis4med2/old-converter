@@ -1,0 +1,48 @@
+# Rust / Tauri
+/target/
+src-tauri/target/
+src-tauri/WixTools/
+*.rs.bk
+*.pdb
+
+# Node
+node_modules/
+dist/
+*.log
+
+# FFmpeg binaries (downloaded locally, not committed except .gitkeep)
+ffmpeg/windows/ffmpeg.exe
+ffmpeg/windows/ffprobe.exe
+ffmpeg/linux/ffmpeg
+ffmpeg/linux/ffprobe
+!ffmpeg/windows/.gitkeep
+!ffmpeg/linux/.gitkeep
+!ffmpeg/README.md
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# App runtime
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.webm
+!assets/*
+preview_*.mp4
+*_old.mp4
+
+# Env / secrets
+.env
+.env.*
+*.key
+*.pem

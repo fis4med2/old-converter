@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Old Converter",
+  "version": "1.0.0",
+  "identifier": "com.oldconverter.app",
+  "build": {
+    "frontendDist": "../src",
+    "devUrl": null,
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Old Converter",
+        "width": 980,
+        "height": 720,
+        "minWidth": 860,
+        "minHeight": 640
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Utility",
+    "shortDescription": "Make your videos feel old again.",
+    "longDescription": "Old Converter turns modern videos into 2015-2017 style uploads using real FFmpeg conversion.",
+    "icon": ["icons/icon.ico", "icons/icon.icns", "icons/icon.png"],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": true
+      }
+    },
+    "resources": ["../ffmpeg/**/*", "../presets/**/*", "../assets/**/*"]
+  }
+}

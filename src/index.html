@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Old Converter</title>
+<link rel="stylesheet" href="styles.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<div class="titlebar">
+  <div class="titlebar-left"><span class="logo">◉</span> <b>OLD CONVERTER</b> <span id="ver" class="ver">v1.0.0</span></div>
+  <div class="titlebar-sub">Make your videos feel old again.</div>
+</div>
+<div class="statusline"><span id="ffStatus">Checking FFmpeg...</span><span id="fileCount"></span></div>
+
+<div class="layout">
+  <!-- LEFT -->
+  <div class="col">
+    <div class="panel">
+      <div class="panel-title">INPUT VIDEO</div>
+      <div class="row">
+        <button id="btnOpen" class="btn">[ Open Video ]</button>
+        <button id="btnQueue" class="btn">+ Queue</button>
+      </div>
+      <div id="dropZone" class="drop">Drag and Drop Video Here<br><small>or click to browse</small></div>
+      <table class="info">
+        <tr><td>File:</td><td id="fiFile">-</td></tr>
+        <tr><td>Resolution:</td><td id="fiRes">-</td></tr>
+        <tr><td>FPS:</td><td id="fiFps">-</td></tr>
+        <tr><td>Codec:</td><td id="fiCodec">-</td></tr>
+        <tr><td>Duration:</td><td id="fiDur">-</td></tr>
+        <tr><td>Video Bitrate:</td><td id="fiVbr">-</td></tr>
+        <tr><td>Audio:</td><td id="fiAudio">-</td></tr>
+        <tr><td>File Size:</td><td id="fiSize">-</td></tr>
+      </table>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">CONVERSION QUEUE</div>
+      <div id="queueList" class="queue"><div class="empty">Queue empty.</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">PREVIEW &nbsp;<small>Original / Old Version</small></div>
+      <div class="row">
+        <button id="btnPreview" class="btn">Generate 10s Preview</button>
+      </div>
+      <div class="prevGrid">
+        <div><div class="cap">Original</div><video id="videoOrig" controls></video></div>
+        <div><div class="cap">Old Version</div><video id="videoOld" controls></video></div>
+      </div>
+      <div class="hint">Preview renders 10s (from 00:05) with current preset. Fast check before full convert.</div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="col">
+    <div class="panel">
+      <div class="panel-title">PRESET</div>
+      <label class="radio"><input type="radio" name="preset" value="yt2015" checked> YouTube 2015 <small>1280x720 · CRF23 · 128k</small></label>
+      <label class="radio"><input type="radio" name="preset" value="yt2017"> YouTube 2017 <small>1920x1080 · CRF21 · 192k</small></label>
+      <label class="radio"><input type="radio" name="preset" value="potato"> Potato 2016 <small>854x480 · CRF30 · 96k</small></label>
+      <label class="radio"><input type="radio" name="preset" value="old720"> Old Internet 720p <small>1280x720 · CRF27 · 128k</small></label>
+      <label class="radio"><input type="radio" name="preset" value="lowq"> Low Quality Upload <small>640x360 · CRF32 · 96k</small></label>
+      <label class="radio"><input type="radio" name="preset" value="custom"> Custom Mode <small>use fields below</small></label>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">OLD STYLE</div>
+      <div class="checks">
+        <label><input type="checkbox" id="os_blur"> Slight Blur</label>
+        <label><input type="checkbox" id="os_fade" checked> Color Fading</label>
+        <label><input type="checkbox" id="os_lowbitrate" checked> Low Bitrate Look</label>
+        <label><input type="checkbox" id="os_sharpen"> Sharpen</label>
+        <label><input type="checkbox" id="os_noise"> Slight Noise</label>
+        <label><input type="checkbox" id="os_43"> 4:3 Aspect Ratio</label>
+        <label><input type="checkbox" id="os_fps"> Reduce FPS</label>
+        <label><input type="checkbox" id="os_acomp"> Audio Compression</label>
+        <label><input type="checkbox" id="os_vhs"> VHS-like Distortion</label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">CUSTOM MODE</div>
+      <div class="grid2">
+        <label>Width <input id="c_width" type="number" value="1280"></label>
+        <label>Height <input id="c_height" type="number" value="720"></label>
+        <label>FPS <input id="c_fps" type="text" placeholder="e.g. 30 (empty=keep)"></label>
+        <label>Codec <select id="c_vcodec"><option value="h264">H.264</option><option value="h265">H.265</option><option value="mpeg4">MPEG-4</option><option value="vp9">VP9</option></select></label>
+        <label>CRF <input id="c_crf" type="number" min="0" max="51" value="23"></label>
+        <label>Video Bitrate <input id="c_vbitrate" type="text" placeholder="e.g. 1200k (empty=CRF)"></label>
+        <label>Audio Codec <select id="c_acodec"><option value="aac">AAC</option><option value="mp3">MP3</option><option value="opus">Opus</option><option value="none">None</option></select></label>
+        <label>Audio Bitrate <select id="c_abitrate"><option>96k</option><option selected>128k</option><option>192k</option><option>320k</option></select></label>
+        <label>Format <select id="c_format"><option value="mp4">MP4</option><option value="mkv">MKV</option><option value="avi">AVI</option><option value="mov">MOV</option><option value="webm">WEBM</option></select></label>
+        <label>x264 Preset <select id="c_preset"><option>ultrafast</option><option>veryfast</option><option>fast</option><option selected>medium</option><option>slow</option></select></label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">OUTPUT</div>
+      <div id="outPath" class="outpath">No file loaded.</div>
+      <div class="est"><span>Original Size: <b id="estOrig">-</b></span><span>Estimated Size: <b id="estNew">-</b> <small>(approx.)</small></span></div>
+      <div class="row">
+        <button id="btnConvert" class="btn primary">CONVERT</button>
+        <button id="btnCancel" class="btn" disabled>Cancel</button>
+      </div>
+      <div id="progWrap" class="progWrap hidden">
+        <div>Converting...</div>
+        <div class="progbar"><div id="progFill" class="progfill"></div></div>
+        <div class="progmeta"><span id="progPct">0%</span><span id="progTime">00:00 / 00:00</span></div>
+        <div class="progmeta"><span id="progSpeed">Speed: --</span><span>ETA: <span id="progEta">--</span></span></div>
+      </div>
+      <div id="doneBox" class="done hidden">
+        <b>Conversion Complete!</b>
+        <div>Output: <span id="doneOutput"></span></div>
+        <div>Original: <span id="doneOrig"></span> → Converted: <span id="doneNew"></span> → Saved: <span id="doneSaved"></span></div>
+        <div class="row">
+          <button id="btnOpenFolder" class="btn">Open Folder</button>
+          <button id="btnAgain" class="btn">Convert Again</button>
+        </div>
+        <div class="welcome">Welcome back to 2016.</div>
+      </div>
+      <div id="errBox" class="err hidden"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">HISTORY <button id="btnClearHist" class="mini">Clear</button></div>
+      <div id="histList" class="queue"><div class="empty">No conversions yet.</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">Old Converter · freeware style utility · FFmpeg inside · <span id="ver2"></span></div>
+</body>
+</html>

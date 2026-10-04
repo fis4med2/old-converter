@@ -1,0 +1,54 @@
+/* Old Converter - Win7 / freeware 2015-2017 look. Gray panels, square buttons, Tahoma. */
+*{box-sizing:border-box}
+body{margin:0;background:#3a3f44;font-family:Tahoma,Verdana,Arial,sans-serif;font-size:13px;color:#222}
+.titlebar{background:linear-gradient(#2f7fb8,#1b5a86);color:#fff;padding:10px 14px;border-bottom:2px solid #123c57}
+.titlebar-left{font-size:18px;letter-spacing:1px}
+.logo{color:#7fd4ff}
+.ver{font-size:11px;background:#123c57;padding:2px 6px;border:1px solid #7fd4ff;margin-left:8px}
+.titlebar-sub{font-size:12px;color:#cdeaff;font-style:italic}
+.statusline{background:#20242a;color:#9fd8ff;font-size:11px;padding:4px 14px;display:flex;justify-content:space-between}
+.layout{display:flex;gap:10px;padding:10px;align-items:flex-start}
+.col{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px}
+.panel{background:linear-gradient(#f7f7f7,#e4e4e4);border:1px solid #9a9a9a;box-shadow:2px 2px 0 rgba(0,0,0,.35);padding:8px}
+.panel-title{background:linear-gradient(#ffffff,#d7e9f5);border:1px solid #7fa9c4;color:#0d4d73;font-weight:bold;font-size:12px;padding:4px 6px;margin:-8px -8px 8px -8px;letter-spacing:.5px}
+.panel-title small{font-weight:normal}
+.btn{background:linear-gradient(#ffffff,#dcdcdc);border:1px solid #707070;padding:5px 12px;font-family:inherit;font-size:12px;cursor:pointer;border-radius:0}
+.btn:hover{background:linear-gradient(#fff8d6,#f0d878);border-color:#8a6d00}
+.btn:active{background:#c9c9c9}
+.btn.primary{background:linear-gradient(#bfe3ff,#2f7fb8);border:1px solid #0d4d73;color:#fff;font-weight:bold;min-width:140px}
+.btn.primary:hover{filter:brightness(1.1)}
+.btn:disabled{opacity:.5;cursor:default}
+.mini{float:right;font-size:11px}
+.row{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.drop{border:2px dashed #7fa9c4;background:#fff;text-align:center;padding:22px 10px;color:#1b5a86;cursor:pointer;margin-bottom:8px}
+.drop.over{background:#fff8d6;border-color:#8a6d00}
+table.info{width:100%;border-collapse:collapse;background:#fff;border:1px solid #9a9a9a;font-size:12px}
+table.info td{border-bottom:1px solid #ddd;padding:3px 6px;word-break:break-all}
+table.info td:first-child{width:110px;background:#eef4f8;font-weight:bold;color:#0d4d73}
+.radio{display:block;background:#fff;border:1px solid #bbb;margin:3px 0;padding:4px 6px;cursor:pointer}
+.radio small{color:#666}
+.checks{display:grid;grid-template-columns:1fr 1fr;gap:2px;background:#fff;border:1px solid #bbb;padding:6px}
+.checks label{font-size:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.grid2 label{font-size:11px;display:flex;flex-direction:column;gap:2px}
+.grid2 input,.grid2 select{border:1px solid #707070;padding:4px;font-family:inherit;border-radius:0}
+.outpath{background:#fff;border:1px solid #9a9a9a;padding:5px;font-size:11px;word-break:break-all;margin-bottom:6px}
+.est{display:flex;gap:14px;font-size:12px;margin-bottom:8px;background:#fffbe8;border:1px solid #c9b458;padding:5px}
+.progWrap{background:#fff;border:1px solid #7fa9c4;padding:8px;margin-top:8px}
+.progbar{height:20px;border:1px solid #555;background:#fff;margin:6px 0;box-shadow:inset 1px 1px 2px #999}
+.progfill{height:100%;width:0%;background:repeating-linear-gradient(90deg,#2f9e44 0 10px,#37b24d 10px 20px);transition:width .2s}
+.progmeta{display:flex;justify-content:space-between;font-size:11px}
+.done{background:#e6f4ea;border:1px solid #2f9e44;padding:8px;margin-top:8px;font-size:12px}
+.welcome{margin-top:6px;font-style:italic;color:#1b5a86}
+.err{background:#fde8e8;border:1px solid #c00;color:#900;padding:6px;margin-top:8px;font-size:12px}
+.queue{background:#fff;border:1px solid #9a9a9a;max-height:150px;overflow:auto;font-size:12px}
+.queue .qitem,.queue .hitem{padding:4px 6px;border-bottom:1px solid #ddd;display:flex;justify-content:space-between;gap:6px}
+.queue .st{font-weight:bold;color:#0d4d73}
+.empty{padding:8px;color:#777;font-style:italic}
+.prevGrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.prevGrid video{width:100%;max-height:180px;background:#000;border:1px solid #555}
+.cap{font-size:11px;font-weight:bold;color:#0d4d73;margin:2px 0}
+.hint{font-size:11px;color:#555;margin-top:4px}
+.hidden{display:none}
+.footer{color:#9fd8ff;font-size:11px;text-align:center;padding:8px}
+@media(max-width:900px){.layout{flex-direction:column}}

@@ -1,0 +1,56 @@
+name: build-windows
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Download FFmpeg (Windows)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path ffmpeg/windows | Out-Null
+          if (-not (Test-Path ffmpeg/windows/ffmpeg.exe)) {
+            Invoke-WebRequest -Uri https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip -OutFile $env:RUNNER_TEMP/ffmpeg.zip
+            Expand-Archive $env:RUNNER_TEMP/ffmpeg.zip $env:RUNNER_TEMP/ffwin -Force
+            $bin = Get-ChildItem $env:RUNNER_TEMP/ffwin -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+            Copy-Item $bin.FullName ffmpeg/windows/ffmpeg.exe
+            $probe = Get-ChildItem $env:RUNNER_TEMP/ffwin -Recurse -Filter ffprobe.exe | Select-Object -First 1
+            if ($probe) { Copy-Item $probe.FullName ffmpeg/windows/ffprobe.exe }
+          }
+          Get-ChildItem ffmpeg/windows
+
+      - name: Install frontend deps
+        run: npm install --no-audit --no-fund
+
+      - name: Build (Tauri)
+        run: npx tauri build --verbose
+
+      - name: Collect artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $exe = Get-ChildItem src-tauri/target/release/bundle/nsis/*setup.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($exe) { Copy-Item $exe.FullName dist/OldConverter-Windows-x64-setup.exe }
+          $files = @("src-tauri/target/release/old-converter.exe", "presets")
+          if (Test-Path ffmpeg/windows/ffmpeg.exe) { $files += "ffmpeg/windows/ffmpeg.exe" }
+          if (Test-Path ffmpeg/windows/ffprobe.exe) { $files += "ffmpeg/windows/ffprobe.exe" }
+          Compress-Archive -Path $files -DestinationPath dist/OldConverter-Windows-x64.zip -Force
+          Get-ChildItem dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OldConverter-Windows-x64
+          path: dist/*
+          if-no-files-found: error

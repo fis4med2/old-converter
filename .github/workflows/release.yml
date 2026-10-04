@@ -1,0 +1,116 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: ubuntu-latest
+            platform: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Tauri system deps (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+            libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev libglib2.0-dev
+
+      - name: Download FFmpeg (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path ffmpeg/windows | Out-Null
+          Invoke-WebRequest -Uri https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip -OutFile $env:RUNNER_TEMP/ffmpeg.zip
+          Expand-Archive $env:RUNNER_TEMP/ffmpeg.zip $env:RUNNER_TEMP/ffwin -Force
+          Copy-Item (Get-ChildItem $env:RUNNER_TEMP/ffwin -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName ffmpeg/windows/ffmpeg.exe
+          $probe = Get-ChildItem $env:RUNNER_TEMP/ffwin -Recurse -Filter ffprobe.exe | Select-Object -First 1
+          if ($probe) { Copy-Item $probe.FullName ffmpeg/windows/ffprobe.exe }
+
+      - name: Download FFmpeg (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          mkdir -p ffmpeg/linux
+          curl -L -o /tmp/ffmpeg.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+          tar -xf /tmp/ffmpeg.tar.xz -C /tmp
+          cp /tmp/ffmpeg-*-amd64-static/ffmpeg ffmpeg/linux/ffmpeg
+          cp /tmp/ffmpeg-*-amd64-static/ffprobe ffmpeg/linux/ffprobe || true
+          chmod +x ffmpeg/linux/ffmpeg ffmpeg/linux/ffprobe
+
+      - name: Install frontend deps
+        run: npm install --no-audit --no-fund
+
+      - name: Build (Tauri)
+        run: npx tauri build --verbose
+        shell: bash
+
+      - name: Collect (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $exe = Get-ChildItem src-tauri/target/release/bundle/nsis/*setup.exe | Select-Object -First 1
+          Copy-Item $exe.FullName dist/OldConverter-Windows-x64-setup.exe
+          $files = @("src-tauri/target/release/old-converter.exe", "presets")
+          if (Test-Path ffmpeg/windows/ffmpeg.exe) { $files += "ffmpeg/windows/ffmpeg.exe" }
+          if (Test-Path ffmpeg/windows/ffprobe.exe) { $files += "ffmpeg/windows/ffprobe.exe" }
+          Compress-Archive -Path $files -DestinationPath dist/OldConverter-Windows-x64.zip -Force
+
+      - name: Collect (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          mkdir -p dist
+          cp $(find src-tauri/target/release/bundle/appimage -name "*.AppImage" | head -n 1) dist/OldConverter-Linux-x86_64.AppImage
+          tar -czf dist/OldConverter-Linux-x86_64.tar.gz -C src-tauri/target/release old-converter -C "$GITHUB_WORKSPACE" ffmpeg/linux presets README.md LICENSE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.platform }}
+          path: dist/*
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ## Old Converter ${{ github.ref_name }}
+
+            Make your videos feel old again.
+
+            ### Downloads
+            - `OldConverter-Windows-x64-setup.exe` — Windows 10/11 installer
+            - `OldConverter-Windows-x64.zip` — Windows portable
+            - `OldConverter-Linux-x86_64.AppImage` — Linux portable
+            - `OldConverter-Linux-x86_64.tar.gz` — Linux archive
+
+            Welcome back to 2016.

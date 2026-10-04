@@ -1,0 +1,1 @@
+{"id":"lowq","label":"Low Quality Upload","width":640,"height":360,"video_codec":"h264","x264_preset":"veryfast","crf":32,"video_bitrate":null,"audio_codec":"aac","audio_bitrate":"96k","format":"mp4","old_style":{"lowbitrate":true,"reduce_fps":true,"audio_comp":true}}

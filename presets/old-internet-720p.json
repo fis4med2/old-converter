@@ -1,0 +1,1 @@
+{"id":"old720","label":"Old Internet 720p","width":1280,"height":720,"video_codec":"h264","x264_preset":"medium","crf":27,"video_bitrate":null,"audio_codec":"aac","audio_bitrate":"128k","format":"mp4","old_style":{"fade":true,"noise":true,"lowbitrate":true}}
