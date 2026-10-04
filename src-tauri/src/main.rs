@@ -74,9 +74,14 @@ fn resolve_bin(app: &AppHandle, base: &str) -> Result<PathBuf, String> {
             return Ok(c);
         }
     }
-    // last resort: system PATH
-    let probe = std::process::Command::new(base).arg("-version").output();
-    if probe.map(|o| o.status.success()).unwrap_or(false) {
+    // last resort: system PATH (under AppImage, AppRun poisons LD_LIBRARY_PATH
+    // and system binaries fail with exit 127 — drop it for the probe)
+    let mut probe = std::process::Command::new(base);
+    probe.arg("-version");
+    if std::env::var_os("APPDIR").is_some() {
+        probe.env_remove("LD_LIBRARY_PATH");
+    }
+    if probe.output().map(|o| o.status.success()).unwrap_or(false) {
         return Ok(PathBuf::from(base));
     }
     Err(format!("{base} not found. Expected it under ffmpeg/{plat}/ next to the app.", plat = if cfg!(windows) { "windows" } else { "linux" }))
@@ -199,11 +204,12 @@ async fn cmd_probe(app: AppHandle, path: String) -> Result<ProbeInfo, String> {
     }
     let meta = std::fs::metadata(p).map_err(|e| format!("Cannot read file: {e}"))?;
     let ffprobe = resolve_bin(&app, "ffprobe")?;
-    let out = tokio::process::Command::new(&ffprobe)
-        .args(["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", &path])
-        .output()
-        .await
-        .map_err(|e| format!("Cannot run ffprobe: {e}"))?;
+    let mut cmd = tokio::process::Command::new(&ffprobe);
+    cmd.args(["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", &path]);
+    if std::env::var_os("APPDIR").is_some() {
+        cmd.env_remove("LD_LIBRARY_PATH");
+    }
+    let out = cmd.output().await.map_err(|e| format!("Cannot run ffprobe: {e}"))?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
         return Err(format!(
@@ -520,13 +526,15 @@ async fn cmd_convert(app: AppHandle, state: State<'_, AppState>, req: ConvertReq
     let ffmpeg = resolve_bin(&app, "ffmpeg")?;
     let args = build_args(&req.input, &req.output, &req.settings, None);
 
-    let mut child = tokio::process::Command::new(&ffmpeg)
-        .args(&args)
+    let mut cc = tokio::process::Command::new(&ffmpeg);
+    cc.args(&args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Cannot start ffmpeg: {e}"))?;
+        .stderr(std::process::Stdio::piped());
+    if std::env::var_os("APPDIR").is_some() {
+        cc.env_remove("LD_LIBRARY_PATH");
+    }
+    let mut child = cc.spawn().map_err(|e| format!("Cannot start ffmpeg: {e}"))?;
 
     let stdout = child.stdout.take().expect("piped stdout");
     let stderr = child.stderr.take().expect("piped stderr");
@@ -674,11 +682,12 @@ async fn cmd_preview(app: AppHandle, req: PreviewRequest) -> Result<String, Stri
     let start: u64 = if req.duration > 16.0 { 5 } else { 0 };
     let clip: u64 = if req.duration > 8.0 { 10 } else { req.duration.max(1.0) as u64 };
     let args = build_args(&req.input, &out, &req.settings, Some((start, clip)));
-    let res = tokio::process::Command::new(&ffmpeg)
-        .args(&args)
-        .output()
-        .await
-        .map_err(|e| format!("Cannot run ffmpeg: {e}"))?;
+    let mut pc = tokio::process::Command::new(&ffmpeg);
+    pc.args(&args);
+    if std::env::var_os("APPDIR").is_some() {
+        pc.env_remove("LD_LIBRARY_PATH");
+    }
+    let res = pc.output().await.map_err(|e| format!("Cannot run ffmpeg: {e}"))?;
     if !res.status.success() {
         let e = String::from_utf8_lossy(&res.stderr);
         let last: Vec<&str> = e.lines().rev().take(3).collect();
