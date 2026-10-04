@@ -20,9 +20,9 @@ jobs:
             platform: linux
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
 
@@ -79,10 +79,12 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           mkdir -p dist
-          cp $(find src-tauri/target/release/bundle/appimage -name "*.AppImage" | head -n 1) dist/OldConverter-Linux-x86_64.AppImage
+          APPIMG=$(find src-tauri/target/release/bundle/appimage -name "*.AppImage" | head -n 1)
+          if [ -n "$APPIMG" ]; then cp "$APPIMG" dist/OldConverter-Linux-x86_64.AppImage; fi
           tar -czf dist/OldConverter-Linux-x86_64.tar.gz -C src-tauri/target/release old-converter -C "$GITHUB_WORKSPACE" ffmpeg/linux presets README.md LICENSE
+          ls -la dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: dist-${{ matrix.platform }}
           path: dist/*
@@ -91,7 +93,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         with:
           pattern: dist-*
           merge-multiple: true
