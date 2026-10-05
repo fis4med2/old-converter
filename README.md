@@ -105,7 +105,7 @@ JSON copies in `presets/`, also hardcoded in `src/app.js` for offline use.
 ## FFmpeg
 
 - Windows CI: `gyan.dev` release-essentials (`ffmpeg.exe` + `ffprobe.exe`).
-- Linux CI: `johnvansickle.com` static (`ffmpeg` + `ffprobe`, chmod +x).
+- Linux CI: BtbN FFmpeg-Builds static (`ffmpeg` + `ffprobe`, chmod +x).
 - Resolution order: bundled `ffmpeg/{windows,linux}/` → `resourceDir` (prod) → dev relative paths → system `PATH` fallback.
 - Errors handled: missing file, corrupted input, missing binary, no space, cancelled (output deleted).
 - License: FFmpeg is LGPL-2.1+/GPL-2+. Bundles are third-party builds; see their pages for source + license text. This repo is MIT; FFmpeg binaries keep their own licenses.

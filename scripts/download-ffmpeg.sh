@@ -22,10 +22,10 @@ if [[ "$TARGET" == "linux" || "$TARGET" == "all" ]]; then
   echo "== Linux FFmpeg =="
   mkdir -p ffmpeg/linux
   if [[ ! -f ffmpeg/linux/ffmpeg ]]; then
-    curl -L -o /tmp/opencode/ffmpeg-linux.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+    curl -L -o /tmp/opencode/ffmpeg-linux.tar.xz https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
     tar -xf /tmp/opencode/ffmpeg-linux.tar.xz -C /tmp/opencode
-    cp /tmp/opencode/ffmpeg-*-amd64-static/ffmpeg ffmpeg/linux/ffmpeg
-    cp /tmp/opencode/ffmpeg-*-amd64-static/ffprobe ffmpeg/linux/ffprobe || true
+    cp /tmp/opencode/ffmpeg-master-latest-linux64-gpl/bin/ffmpeg ffmpeg/linux/ffmpeg
+    cp /tmp/opencode/ffmpeg-master-latest-linux64-gpl/bin/ffprobe ffmpeg/linux/ffprobe
     chmod +x ffmpeg/linux/ffmpeg ffmpeg/linux/ffprobe
     echo "Linux binaries ready."
   else
