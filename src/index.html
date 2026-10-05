@@ -47,9 +47,10 @@
         <button id="btnPreview" class="btn">Generate 10s Preview</button>
       </div>
       <div class="prevGrid">
-        <div><div class="cap">Original</div><video id="videoOrig" controls></video></div>
-        <div><div class="cap">Old Version</div><video id="videoOld" controls></video></div>
+        <div><div class="cap">Original</div><video id="videoOrig" controls preload="metadata"></video></div>
+        <div><div class="cap">Old Version</div><video id="videoOld" controls preload="metadata"></video></div>
       </div>
+      <div id="playHint" class="hint"></div>
       <div class="hint">Preview renders 10s (from 00:05) with current preset. Fast check before full convert.</div>
     </div>
   </div>

@@ -671,6 +671,60 @@ struct PreviewRequest {
     settings: ConvertSettings,
 }
 
+/// Compatible 480p H.264 proxy of any input, for in-app playback when the
+/// webview cannot decode the original codec (HEVC/AV1/.... Cached by
+/// path+size+mtime in the temp dir. Never touches the user's file.
+#[tauri::command]
+async fn cmd_proxy(app: AppHandle, input: String) -> Result<String, String> {
+    let p = Path::new(&input);
+    if !p.exists() {
+        return Err("Input file does not exist.".into());
+    }
+    let meta = std::fs::metadata(p).map_err(|e| format!("Cannot read file: {e}"))?;
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    std::hash::Hash::hash(&input, &mut h);
+    std::hash::Hash::hash(&meta.len(), &mut h);
+    std::hash::Hash::hash(&meta.modified().ok(), &mut h);
+    let out = std::env::temp_dir().join(format!("oc_orig_{:x}.mp4", std::hash::Hasher::finish(&h)));
+    if !out.exists() {
+        let ffmpeg = resolve_bin(&app, "ffmpeg")?;
+        let outs = out.to_string_lossy().to_string();
+        let args = [
+            "-y",
+            "-nostats",
+            "-i",
+            input.as_str(),
+            "-vf",
+            "scale=-2:'min(480,ih)':flags=fast_bilinear",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "28",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            outs.as_str(),
+        ];
+        let mut pc = tokio::process::Command::new(&ffmpeg);
+        pc.args(&args);
+        if std::env::var_os("APPDIR").is_some() {
+            pc.env_remove("LD_LIBRARY_PATH");
+        }
+        let res = pc.output().await.map_err(|e| format!("Cannot run ffmpeg: {e}"))?;
+        if !res.status.success() {
+            return Err("Could not build a playable preview of this file.".into());
+        }
+    }
+    Ok(out.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 async fn cmd_preview(app: AppHandle, req: PreviewRequest) -> Result<String, String> {
     if !Path::new(&req.input).exists() {
@@ -681,7 +735,14 @@ async fn cmd_preview(app: AppHandle, req: PreviewRequest) -> Result<String, Stri
     let out = tmp.to_string_lossy().to_string();
     let start: u64 = if req.duration > 16.0 { 5 } else { 0 };
     let clip: u64 = if req.duration > 8.0 { 10 } else { req.duration.max(1.0) as u64 };
-    let args = build_args(&req.input, &out, &req.settings, Some((start, clip)));
+    // preview file is always .mp4: force a compatible encoder set no matter
+    // what the conversion settings ask for (vp9-in-mp4 would not play back)
+    let mut s = req.settings.clone();
+    s.video_codec = "h264".into();
+    s.audio_codec = "aac".into();
+    s.format = "mp4".into();
+    s.x264_preset = "veryfast".into();
+    let args = build_args(&req.input, &out, &s, Some((start, clip)));
     let mut pc = tokio::process::Command::new(&ffmpeg);
     pc.args(&args);
     if std::env::var_os("APPDIR").is_some() {
@@ -749,6 +810,7 @@ pub fn run() {
             cmd_convert,
             cmd_cancel,
             cmd_preview,
+            cmd_proxy,
             cmd_estimate,
             cmd_pick_file,
             cmd_reveal

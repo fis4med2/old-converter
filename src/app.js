@@ -72,6 +72,42 @@ function err(msg) {
   b.classList.remove("hidden");
   setTimeout(() => b.classList.add("hidden"), 6000);
 }
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function playHint(t) {
+  const h = $("playHint");
+  if (h) h.textContent = t;
+}
+
+// If a player cannot decode a file (HEVC/AV1/... in WebKit), it stays black.
+// Detect that and swap in a compatible 480p proxy built by the backend.
+const playTimers = {};
+function armPlayable(video, path) {
+  video.onerror = null;
+  clearTimeout(playTimers[video.id]);
+  delete video.dataset.proxy;
+  video.dataset.want = path;
+  video.onerror = () => ensureProxy(video, path);
+  playTimers[video.id] = setTimeout(() => {
+    if (video.dataset.want === path && video.readyState < 2 && !video.dataset.proxy) ensureProxy(video, path);
+  }, 5000);
+}
+async function ensureProxy(video, path) {
+  if (video.dataset.proxy || video.dataset.want !== path) return;
+  video.dataset.proxy = "1";
+  video.onerror = null;
+  playHint("Player cannot decode this codec — building compatible preview...");
+  try {
+    const out = await invoke("cmd_proxy", { input: path });
+    if (video.dataset.want !== path) return;
+    video.src = fileSrc(out);
+    playHint("Showing compatible preview (your file is untouched).");
+  } catch (e) {
+    playHint("");
+    err(typeof e === "string" ? e : "Preview build failed.");
+  }
+}
 
 async function loadFile(path) {
   try {
@@ -87,6 +123,7 @@ async function loadFile(path) {
     $("fiAudio").textContent = info.audio;
     $("fiSize").textContent = info.file_size_human;
     $("videoOrig").src = fileSrc(info.file);
+    armPlayable($("videoOrig"), info.file);
     $("videoOld").removeAttribute("src");
     $("videoOld").load();
     $("doneBox").classList.add("hidden");
@@ -118,7 +155,7 @@ function renderQueue() {
   queue.forEach((q, i) => {
     const d = document.createElement("div");
     d.className = "qitem";
-    d.innerHTML = `<span>${q.name}</span><span class="st">${q.status}</span>`;
+    d.innerHTML = `<span>${esc(q.name)}</span><span class="st">${esc(q.status)}</span>`;
     d.title = `${q.input} · ${q.presetLabel}`;
     d.onclick = () => { if (q.status !== "Converting") loadFile(q.input); };
     const rm = document.createElement("button");
@@ -140,7 +177,7 @@ function renderHistory() {
   h.slice().reverse().forEach((it) => {
     const d = document.createElement("div");
     d.className = "hitem";
-    d.innerHTML = `<span>${it.in} → ${it.out}<br><small>${it.preset} · ${it.size}</small></span>`;
+    d.innerHTML = `<span>${esc(it.in)} → ${esc(it.out)}<br><small>${esc(it.preset)} · ${esc(it.size)}</small></span>`;
     box.appendChild(d);
   });
 }
@@ -173,6 +210,7 @@ async function doConvertOne(input, info, settings, presetLabel) {
     $("doneNew").textContent = outSize;
     $("doneSaved").textContent = "see sizes above";
     $("videoOld").src = fileSrc(out);
+    armPlayable($("videoOld"), out);
     pushHistory({ in: info.file_name, out: out.split(/[/\\]/).pop(), preset: presetLabel, size: outSize });
     return true;
   } catch (e) {
@@ -270,6 +308,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     try {
       const out = await invoke("cmd_preview", { req: { input: current.file, duration: current.duration, settings: settingsFromUI() } });
       $("videoOld").src = fileSrc(out);
+    armPlayable($("videoOld"), out);
     } catch (e) { err(typeof e === "string" ? e : "Preview failed."); }
     $("btnPreview").disabled = false;
   };
