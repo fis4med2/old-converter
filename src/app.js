@@ -80,9 +80,34 @@ function playHint(t) {
   if (h) h.textContent = t;
 }
 
-// If a player cannot decode a file (HEVC/AV1/... in WebKit), it stays black.
-// Detect that and swap in a compatible 480p proxy built by the backend.
+// Codecs/containers WebKit reliably decodes. Anything else is never handed
+// to the <video> tag directly (a decode attempt can abort the web process
+// where GStreamer codecs are missing) — a compatible proxy is shown instead.
+const SAFE_V = ["h264", "avc1", "vp8", "vp9", "theora"];
+const SAFE_A = ["aac", "mp3", "vorbis", "opus", "none"];
+const SAFE_EXT = ["mp4", "m4v", "mov", "webm", "ogv"];
+function directlyPlayable(info) {
+  const ext = (info.file.split(".").pop() || "").toLowerCase();
+  return SAFE_EXT.includes(ext) && SAFE_V.includes(info.codec) && SAFE_A.includes(info.audio_codec);
+}
 const playTimers = {};
+async function showInPlayer(video, info) {
+  if (directlyPlayable(info)) {
+    video.src = fileSrc(info.file);
+    armPlayable(video, info.file);
+  } else {
+    playHint("Format needs a compatible preview — building...");
+    try {
+      const out = await invoke("cmd_proxy", { input: info.file });
+      video.dataset.want = out;
+      video.src = fileSrc(out);
+      playHint("Showing compatible preview (your file is untouched).");
+    } catch (e) {
+      playHint("");
+      err(typeof e === "string" ? e : "Preview build failed.");
+    }
+  }
+}
 function armPlayable(video, path) {
   video.onerror = null;
   clearTimeout(playTimers[video.id]);
@@ -122,8 +147,10 @@ async function loadFile(path) {
     $("fiVbr").textContent = info.video_bitrate_str;
     $("fiAudio").textContent = info.audio;
     $("fiSize").textContent = info.file_size_human;
-    $("videoOrig").src = fileSrc(info.file);
-    armPlayable($("videoOrig"), info.file);
+    $("videoOrig").removeAttribute("src");
+    $("videoOrig").load();
+    delete $("videoOrig").dataset.want;
+    await showInPlayer($("videoOrig"), info);
     $("videoOld").removeAttribute("src");
     $("videoOld").load();
     $("doneBox").classList.add("hidden");
@@ -200,17 +227,22 @@ async function doConvertOne(input, info, settings, presetLabel) {
     const out = await invoke("cmd_convert", { req: { id, input, output, duration: info.duration, settings } });
     lastOutput = out;
     let outSize = "-";
+    let outProbe = null;
     try {
-      const probe = await invoke("cmd_probe", { path: out });
-      outSize = probe.file_size_human;
+      outProbe = await invoke("cmd_probe", { path: out });
+      outSize = outProbe.file_size_human;
     } catch {}
     $("doneBox").classList.remove("hidden");
     $("doneOutput").textContent = out;
     $("doneOrig").textContent = info.file_size_human;
     $("doneNew").textContent = outSize;
     $("doneSaved").textContent = "see sizes above";
-    $("videoOld").src = fileSrc(out);
-    armPlayable($("videoOld"), out);
+    if (outProbe) {
+      await showInPlayer($("videoOld"), outProbe);
+    } else {
+      $("videoOld").src = fileSrc(out);
+      armPlayable($("videoOld"), out);
+    }
     pushHistory({ in: info.file_name, out: out.split(/[/\\]/).pop(), preset: presetLabel, size: outSize });
     return true;
   } catch (e) {

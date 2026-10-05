@@ -27,7 +27,8 @@ Desktop video converter with a 2015–2017 freeware look and real FFmpeg convers
   - VHS-like Distortion → `noise+eq+vignette`
 - **Custom Mode** — resolution, FPS, codec (H.264/H.265/MPEG-4/VP9), CRF, video bitrate, audio codec/bitrate, format (MP4/MKV/AVI/MOV/WEBM), x264 preset
 - **Real progress** — ffmpeg `-progress pipe:1`, parsed `out_time_ms` vs duration, speed + ETA, cancel button, UI never blocks (async task)
-- **10s preview** — renders 10s clip (from 00:05) with current settings; Original vs Old Version side by side
+- **10s preview** — renders 10s clip (from 00:05) with current settings, always H.264/MP4 so it plays back; Original vs Old Version side by side
+- **No black screens** — if the webview cannot decode a file (HEVC/AV1/...), the player auto-swaps to a cached 480p H.264 proxy; your file is never touched
 - **Size estimate** — `(video+audio bitrate)*duration/8`, CRF approximation table; always labeled approx.
 - **Queue** — multiple videos, per-item preset snapshot, Waiting/Converting/Done/Error
 - **History** — last 100 conversions in localStorage, clear button

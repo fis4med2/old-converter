@@ -65,7 +65,10 @@ fn candidate_bins(app: &AppHandle, base: &str) -> Vec<PathBuf> {
 
 fn resolve_bin(app: &AppHandle, base: &str) -> Result<PathBuf, String> {
     for c in candidate_bins(app, base) {
-        if c.components().count() > 1 && c.exists() {
+        // NOTE: must be is_file — tauri-build copies the resources tree next
+        // to the binary, so a bare `ffmpeg/` *directory* exists there and a
+        // plain exists() check would return it as the binary.
+        if c.components().count() > 1 && c.is_file() {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
