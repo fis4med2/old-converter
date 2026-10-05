@@ -21,14 +21,15 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path ffmpeg/windows | Out-Null
-          if (-not (Test-Path ffmpeg/windows/ffmpeg.exe)) {
-            Invoke-WebRequest -Uri https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip -OutFile $env:RUNNER_TEMP/ffmpeg.zip
+          if (-not (Test-Path ffmpeg/windows/ffmpeg.exe) -or -not (Test-Path ffmpeg/windows/ffprobe.exe)) {
+            Invoke-WebRequest -Uri https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip -OutFile $env:RUNNER_TEMP/ffmpeg.zip
             Expand-Archive $env:RUNNER_TEMP/ffmpeg.zip $env:RUNNER_TEMP/ffwin -Force
             $bin = Get-ChildItem $env:RUNNER_TEMP/ffwin -Recurse -Filter ffmpeg.exe | Select-Object -First 1
             Copy-Item $bin.FullName ffmpeg/windows/ffmpeg.exe
             $probe = Get-ChildItem $env:RUNNER_TEMP/ffwin -Recurse -Filter ffprobe.exe | Select-Object -First 1
-            if ($probe) { Copy-Item $probe.FullName ffmpeg/windows/ffprobe.exe }
+            Copy-Item $probe.FullName ffmpeg/windows/ffprobe.exe
           }
+          if (-not (Test-Path ffmpeg/windows/ffmpeg.exe) -or -not (Test-Path ffmpeg/windows/ffprobe.exe)) { throw "FFmpeg download failed" }
           Get-ChildItem ffmpeg/windows
 
       - name: Install frontend deps

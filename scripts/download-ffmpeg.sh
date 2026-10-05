@@ -8,10 +8,10 @@ if [[ "$TARGET" == "windows" || "$TARGET" == "all" ]]; then
   echo "== Windows FFmpeg =="
   mkdir -p ffmpeg/windows
   if [[ ! -f ffmpeg/windows/ffmpeg.exe ]]; then
-    curl -L -o /tmp/opencode/ffmpeg-win.zip https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+    curl -fSL --retry 3 -o /tmp/opencode/ffmpeg-win.zip https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip
     unzip -o /tmp/opencode/ffmpeg-win.zip -d /tmp/opencode/ffwin
-    cp /tmp/opencode/ffwin/*/bin/ffmpeg.exe ffmpeg/windows/ffmpeg.exe
-    cp /tmp/opencode/ffwin/*/bin/ffprobe.exe ffmpeg/windows/ffprobe.exe || echo "ffprobe missing in essentials build, trying full build"
+    cp /tmp/opencode/ffwin/ffmpeg-master-latest-win64-gpl/bin/ffmpeg.exe ffmpeg/windows/ffmpeg.exe
+    cp /tmp/opencode/ffwin/ffmpeg-master-latest-win64-gpl/bin/ffprobe.exe ffmpeg/windows/ffprobe.exe
     echo "Windows binaries ready."
   else
     echo "Windows binaries already present, skipping."

@@ -40,11 +40,10 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path ffmpeg/windows | Out-Null
-          Invoke-WebRequest -Uri https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip -OutFile $env:RUNNER_TEMP/ffmpeg.zip
+          Invoke-WebRequest -Uri https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip -OutFile $env:RUNNER_TEMP/ffmpeg.zip
           Expand-Archive $env:RUNNER_TEMP/ffmpeg.zip $env:RUNNER_TEMP/ffwin -Force
           Copy-Item (Get-ChildItem $env:RUNNER_TEMP/ffwin -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName ffmpeg/windows/ffmpeg.exe
-          $probe = Get-ChildItem $env:RUNNER_TEMP/ffwin -Recurse -Filter ffprobe.exe | Select-Object -First 1
-          if ($probe) { Copy-Item $probe.FullName ffmpeg/windows/ffprobe.exe }
+          Copy-Item (Get-ChildItem $env:RUNNER_TEMP/ffwin -Recurse -Filter ffprobe.exe | Select-Object -First 1).FullName ffmpeg/windows/ffprobe.exe
 
       - name: Download FFmpeg (Linux)
         if: matrix.platform == 'linux'

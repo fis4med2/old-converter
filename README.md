@@ -1,6 +1,13 @@
 # OLD CONVERTER
 
+[![build-windows](https://github.com/fis4med2/old-converter/actions/workflows/build-windows.yml/badge.svg)](https://github.com/fis4med2/old-converter/actions/workflows/build-windows.yml)
+[![build-linux](https://github.com/fis4med2/old-converter/actions/workflows/build-linux.yml/badge.svg)](https://github.com/fis4med2/old-converter/actions/workflows/build-linux.yml)
+[![release](https://img.shields.io/github/v/release/fis4med2/old-converter)](https://github.com/fis4med2/old-converter/releases)
+[![license](https://img.shields.io/github/license/fis4med2/old-converter)](LICENSE)
+
 **Make your videos feel old again.**
+
+> ⬇️ **Download: [Latest Release](https://github.com/fis4med2/old-converter/releases/latest)** — Windows installer + portable ZIP, Linux AppImage + tarball. No Python, Node or FFmpeg needed.
 
 Desktop video converter with a 2015–2017 freeware look and real FFmpeg conversion underneath. Turns modern videos into files that feel uploaded to the internet in 2015–2017: real resolution / FPS / codec / CRF / bitrate / audio changes, plus optional old-style filters.
 
@@ -105,7 +112,7 @@ JSON copies in `presets/`, also hardcoded in `src/app.js` for offline use.
 
 ## FFmpeg
 
-- Windows CI: `gyan.dev` release-essentials (`ffmpeg.exe` + `ffprobe.exe`).
+- Windows CI: BtbN FFmpeg-Builds (`ffmpeg.exe` + `ffprobe.exe`).
 - Linux CI: BtbN FFmpeg-Builds static (`ffmpeg` + `ffprobe`, chmod +x).
 - Resolution order: bundled `ffmpeg/{windows,linux}/` → `resourceDir` (prod) → dev relative paths → system `PATH` fallback.
 - Errors handled: missing file, corrupted input, missing binary, no space, cancelled (output deleted).
